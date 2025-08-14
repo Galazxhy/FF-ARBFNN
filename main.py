@@ -14,7 +14,8 @@ from collections import defaultdict
 
 import torch
 from config import config
-
+import random
+import numpy as np
 from omegaconf import DictConfig
 
 from model import FF_RBF
@@ -69,6 +70,7 @@ def validate_or_test(model, partition, epoch=None):
 
     model.eval()
     print(partition)
+    outAll, yAll = None, None
     with torch.no_grad():
         for inputs, labels in data_loader:
             inputs, labels = utils.preprocess_inputs(inputs, labels)
@@ -76,16 +78,37 @@ def validate_or_test(model, partition, epoch=None):
             scalar_outputs = model.forward_downstream_classification_model(
                 inputs, labels
             )
+
+            outAll, yAll = utils.ts_append(
+                outAll, scalar_outputs["output"]
+            ), utils.ts_append(yAll, labels["class_labels"])
+
             test_results = utils.log_results(
                 test_results, scalar_outputs, num_steps_per_epoch
             )
 
+        test_acc, test_f1_mac, test_f1_mic, test_auc = utils.valid_no_model(
+            outAll.argmax(1).cpu().numpy(), yAll.cpu().numpy()
+        )
+        print(
+            "test_acc:",
+            test_acc,
+            "test_f1_mac:",
+            test_f1_mac,
+            "test_f1_mic:",
+            test_f1_mic,
+            "test_auc:",
+            test_auc,
+        )
     utils.print_results(partition, time.time() - test_time, test_results, epoch=epoch)
     model.train()
 
 
 def run():
-    model = FF_RBF.FF_RBF(out_features=4)
+    np.random.seed(config.seed)
+    torch.manual_seed(config.seed)
+    random.seed(config.seed)
+    model = FF_RBF.FF_RBF(out_features=config.out_dim)
     model, optimizer = utils.get_optimizer(model)
     model = train(model, optimizer)
     validate_or_test(model, "val")

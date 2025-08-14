@@ -10,20 +10,21 @@ Copyright (c) 2025 by Astroyd, All Rights Reserved.
 """
 
 device = "cuda"
-
-epoch = 1200
+# seed = [42, 15, 263, 745, 32, 85, 52, 63, 37, 73]
+seed = 42
+epoch = 2000
 batch_size = 16
 
 
-init_num_centers = [13, 1200]
+init_num_centers = [13, 2000]
 
 out_dim = 4
 
 lr = 1e-5
-wd = 3e-3
-momentum = 0.95
+wd = 1e-4
+momentum = 0.9
 
-downstream_lr = 6e-3
-downstream_wd = 3e-4
+downstream_lr = 1e-2
+downstream_wd = 1e-3
 
-val_idx = 50
+val_idx = -1

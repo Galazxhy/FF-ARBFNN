@@ -51,6 +51,7 @@ class RBFLayer(nn.Module):
     def addNeurons(self, indices):
         best_centers = nn.Parameter(
             torch.index_select(self.centers.clone().detach(), 0, indices)
+            + torch.rand((len(indices), 1)).cuda()
         )
         best_width = nn.Parameter(
             torch.index_select(self.width.clone().detach(), 0, indices)

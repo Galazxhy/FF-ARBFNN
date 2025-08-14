@@ -16,6 +16,9 @@ import torch
 from model.FF_TE import FF_TE
 from config import config
 
+import torch.nn.functional as F
+from sklearn.metrics import f1_score, roc_auc_score
+
 
 def get_accuracy(output, target):
     """Computes the accuracy."""
@@ -34,16 +37,25 @@ def print_results(partition, iteration_time, scalar_outputs, epoch=None):
     )
     if scalar_outputs is not None:
         for key, value in scalar_outputs.items():
-            print(f"{key}: {value:.4f} \t", end="")
+            (
+                print(f"{key}: {value:.4f} \t", end="")
+                if key is not "output"
+                else print("output")
+            )
     print()
 
 
 def log_results(result_dict, scalar_outputs, num_steps):
     for key, value in scalar_outputs.items():
-        if isinstance(value, float):
-            result_dict[key] += value / num_steps
+        if "num_neurons_layer" in key:
+            result_dict[key] = value
+        elif "output" in key:
+            result_dict[key] = value
         else:
-            result_dict[key] += value.item() / num_steps
+            if isinstance(value, float):
+                result_dict[key] += value / num_steps
+            else:
+                result_dict[key] += value.item() / num_steps
     return result_dict
 
 
@@ -74,7 +86,6 @@ def update_learning_rate(optimizer, epoch):
 
 
 def get_data(partition):
-    # dataset = ff_mnist.FF_MNIST(opt, partition)
     dataset = FF_TE(partition)
 
     # Improve reproducibility in dataloader.
@@ -120,3 +131,23 @@ def get_optimizer(model):
         ]
     )
     return model, optimizer
+
+
+def ts_append(a, b):
+    """List like 'Append' tool for tensor datatype
+    ---
+    Parameters:
+        a, b: append a with b
+    """
+    if a is None:
+        return b
+    else:
+        return torch.cat([a, b], dim=0)
+
+
+def valid_no_model(output, y):
+    acc = sum(output == y) / (output.shape[0])
+    f1_mac = f1_score(output, y, average="macro")
+    f1_mic = f1_score(output, y, average="micro")
+    auc_s = roc_auc_score(output, F.one_hot(torch.tensor(y)).numpy(), multi_class="ovo")
+    return (acc, f1_mac, f1_mic, auc_s)

@@ -77,6 +77,7 @@ class FF_RBF(nn.Module):
 
     def _layer_norm(self, z, eps=1e-8):
         return z / (torch.sqrt(torch.mean(z**2, dim=-1, keepdim=True)) + eps)
+        # return (z - z.mean(dim=1, keepdim=True)) / (z.std(dim=1, keepdim=True) + eps)
 
     def _calc_ff_loss(self, z, labels):
         sum_of_squares = torch.sum(z**2, dim=-1)
@@ -102,25 +103,25 @@ class FF_RBF(nn.Module):
                 g_pos = torch.sum(hid[: config.batch_size] ** 2, dim=0)
                 g_neg = torch.sum(hid[config.batch_size :] ** 2, dim=0)
 
-                lgt_pos = g_pos - 0.5
-                lgt_neg = g_neg - 0.5
+                lgt_pos = g_pos - 1
+                lgt_neg = g_neg - 1
 
-                add_pos_mask = torch.sigmoid(lgt_pos) > 0.6
-                add_neg_mask = torch.sigmoid(lgt_neg) < 0.4
+                add_pos_mask = torch.sigmoid(lgt_pos) > 0.5
+                add_neg_mask = torch.sigmoid(lgt_neg) < 0.5
 
                 add_mask = add_pos_mask & add_neg_mask
 
                 self.add_weight(torch.where(add_mask)[0])
                 layer.addNeurons(torch.where(add_mask)[0])
 
-                hid = layer(z)
-                hid = self.act_fn.apply(hid)
+                # hid = layer(z)
+                # hid = self.act_fn.apply(hid)
 
-                g_pos = torch.sum(hid[: config.batch_size] ** 2, dim=0)
-                g_neg = torch.sum(hid[config.batch_size :] ** 2, dim=0)
+                # g_pos = torch.sum(hid[: config.batch_size] ** 2, dim=0)
+                # g_neg = torch.sum(hid[config.batch_size :] ** 2, dim=0)
 
-                lgt_pos = g_pos - 0.5
-                lgt_neg = g_neg - 0.5
+                # lgt_pos = g_pos - 0.5
+                # lgt_neg = g_neg - 0.5
 
                 del_pos_mask = torch.sigmoid(lgt_pos) < 0.5
                 del_neg_mask = torch.sigmoid(lgt_neg) > 0.5
@@ -142,7 +143,7 @@ class FF_RBF(nn.Module):
         posneg_labels[: config.batch_size] = 1
 
         z = z.reshape(z.shape[0], -1)
-        z = self._layer_norm(z)
+        # z = self._layer_norm(z)
         for idx, layer in enumerate(self.rbf_embeddings):
             z = layer(z)
             z = self.act_fn.apply(z)
@@ -195,6 +196,7 @@ class FF_RBF(nn.Module):
         classification_loss = self.classification_loss(output, labels["class_labels"])
         classification_accuracy = get_accuracy(output.data, labels["class_labels"])
 
+        scalar_outputs["output"] = output
         scalar_outputs["Loss"] += classification_loss
         scalar_outputs["classification_loss"] = classification_loss
         scalar_outputs["classification_accuracy"] = classification_accuracy
