@@ -12,8 +12,7 @@ Copyright (c) 2025 by Astroyd, All Rights Reserved.
 from datetime import timedelta
 
 import torch
-
-from model.FF_TE import FF_TE
+from model.FF_TE import FF_TE, FF_MNIST
 from config import config
 
 import torch.nn.functional as F
@@ -27,7 +26,7 @@ def get_accuracy(output, target):
         return (prediction == target).sum() / config.batch_size
 
 
-def print_results(partition, iteration_time, scalar_outputs, epoch=None):
+def print_results(partition, iteration_time, scalar_outputs, writer, epoch=None):
     if epoch is not None:
         print(f"Epoch {epoch} \t", end="")
 
@@ -39,16 +38,28 @@ def print_results(partition, iteration_time, scalar_outputs, epoch=None):
         for key, value in scalar_outputs.items():
             (
                 print(f"{key}: {value:.4f} \t", end="")
-                if key is not "output"
+                if key != "output"
                 else print("output")
             )
     print()
+
+    if scalar_outputs is not None:
+        for key, value in scalar_outputs.items():
+            (
+                writer.add_scalar(partition + key, value, epoch)
+                if key != "output"
+                else None
+            )
 
 
 def log_results(result_dict, scalar_outputs, num_steps):
     for key, value in scalar_outputs.items():
         if "num_neurons_layer" in key:
             result_dict[key] = value
+        elif "Dup_neurons" in key:
+            result_dict[key] += value.item()
+        elif "Del_neurons" in key:
+            result_dict[key] += value.item()
         elif "output" in key:
             result_dict[key] = value
         else:
@@ -61,7 +72,7 @@ def log_results(result_dict, scalar_outputs, num_steps):
 
 def dict_to_cuda(dict):
     for key, value in dict.items():
-        dict[key] = value.cuda(non_blocking=True)
+        dict[key] = value.to(torch.device(config.device))
     return dict
 
 
@@ -86,7 +97,7 @@ def update_learning_rate(optimizer, epoch):
 
 
 def get_data(partition):
-    dataset = FF_TE(partition)
+    dataset = FF_MNIST(partition)
 
     # Improve reproducibility in dataloader.
     g = torch.Generator()
@@ -104,7 +115,7 @@ def get_data(partition):
 
 def get_optimizer(model):
     if "cuda" in config.device:
-        model = model.cuda()
+        model = model.to(config.device)
     # print(model, "\n")
 
     # Create optimizer with different hyper-parameters for the main model
@@ -114,7 +125,7 @@ def get_optimizer(model):
         for p in model.parameters()
         if all(p is not x for x in [model.classification_weight])
     ]
-    optimizer = torch.optim.SGD(
+    optimizer = torch.optim.AdamW(
         [
             {
                 "params": main_model_params,

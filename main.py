@@ -12,15 +12,27 @@ Copyright (c) 2025 by Astroyd, All Rights Reserved.
 import time
 from collections import defaultdict
 
+import os
 import torch
 from config import config
 import random
 import numpy as np
 from omegaconf import DictConfig
+from torch.utils.tensorboard import SummaryWriter
 
 from model import FF_RBF
 from model import utils
 from torchviz import make_dot
+
+
+if not os.path.exists("./Log"):
+    os.mkdir("./Log")
+i = 0
+while True:
+    if not os.path.exists("./Log/exp_" + str(i)):
+        writer = SummaryWriter("./Log/exp_" + str(i))
+        break
+    i = i + 1
 
 
 def train(model, optimizer):
@@ -45,13 +57,18 @@ def train(model, optimizer):
             optimizer.step()
 
             model.self_organize(inputs)
-            _, optimizer = utils.get_optimizer(model)
+            if model.organized == True:
+                scalar_outputs["Dup_neurons"] += model.dup_neurons
+                scalar_outputs["Del_neurons"] += model.del_neurons
+                _, optimizer = utils.get_optimizer(model)
 
             train_results = utils.log_results(
                 train_results, scalar_outputs, num_steps_per_epoch
             )
 
-        utils.print_results("train", time.time() - start_time, train_results, epoch)
+        utils.print_results(
+            "train", time.time() - start_time, train_results, writer, epoch
+        )
 
         start_time = time.time()
 
@@ -84,9 +101,8 @@ def validate_or_test(model, partition, epoch=None):
             ), utils.ts_append(yAll, labels["class_labels"])
 
             test_results = utils.log_results(
-                test_results, scalar_outputs, num_steps_per_epoch
+                test_results, scalar_outputs, writer, num_steps_per_epoch
             )
-
         test_acc, test_f1_mac, test_f1_mic, test_auc = utils.valid_no_model(
             outAll.argmax(1).cpu().numpy(), yAll.cpu().numpy()
         )
@@ -105,9 +121,10 @@ def validate_or_test(model, partition, epoch=None):
 
 
 def run():
-    np.random.seed(config.seed)
-    torch.manual_seed(config.seed)
-    random.seed(config.seed)
+    # np.random.seed(config.seed)
+    # torch.manual_seed(config.seed)
+    # random.seed(config.seed)
+
     model = FF_RBF.FF_RBF(out_features=config.out_dim)
     model, optimizer = utils.get_optimizer(model)
     model = train(model, optimizer)
