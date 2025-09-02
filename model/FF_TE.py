@@ -45,14 +45,15 @@ class FF_TE(torch.utils.data.Dataset):
         self.uniform_label = torch.ones(self.num_classes) / self.num_classes
 
     def __getitem__(self, index):
-        pos_sample, neg_sample, neutral_sample, class_label = self._generate_sample(
-            index
+        pos_sample, neg_sample, neutral_sample, original_sample, class_label = (
+            self._generate_sample(index)
         )
 
         inputs = {
             "pos_sample": pos_sample,
             "neg_sample": neg_sample,
             "natrual_sample": neutral_sample,
+            "original_sample": original_sample,
         }
         labels = {"class_labels": class_label}
         return inputs, labels
@@ -100,13 +101,17 @@ class FF_TE(torch.utils.data.Dataset):
         # z[:, 0, : self.num_classes] = self.uniform_label
         return z
 
+    def _get_original_sample(self, z):
+        return z
+
     def _generate_sample(self, index):
         # Get MNIST sample.
         sample, class_label = self.TE[index]
         pos_sample = self._get_pos_sample(sample, class_label)
         neg_sample = self._get_neg_sample(sample, class_label)
         neutral_sample = self._get_neutral_sample(sample)
-        return pos_sample, neg_sample, neutral_sample, class_label
+        original_sample = self._get_original_sample(sample)
+        return pos_sample, neg_sample, neutral_sample, original_sample, class_label
 
 
 class FF_MNIST(torch.utils.data.Dataset):
@@ -116,14 +121,15 @@ class FF_MNIST(torch.utils.data.Dataset):
         self.uniform_label = torch.ones(self.num_classes) / self.num_classes
 
     def __getitem__(self, index):
-        pos_sample, neg_sample, neutral_sample, class_label = self._generate_sample(
-            index
+        pos_sample, neg_sample, neutral_sample, original_sample, class_label = (
+            self._generate_sample(index)
         )
 
         inputs = {
             "pos_sample": pos_sample,
             "neg_sample": neg_sample,
             "natrual_sample": neutral_sample,
+            "original_sample": original_sample,
         }
         labels = {"class_labels": class_label}
         return inputs, labels
@@ -161,25 +167,29 @@ class FF_MNIST(torch.utils.data.Dataset):
         z[:, 0, : self.num_classes] = self.uniform_label
         return z
 
+    def _get_original_sample(self, z):
+        return z
+
     def _generate_sample(self, index):
         # Get MNIST sample.
         sample, class_label = self.mnist[index]
         pos_sample = self._get_pos_sample(sample, class_label)
         neg_sample = self._get_neg_sample(sample, class_label)
         neutral_sample = self._get_neutral_sample(sample)
-        return pos_sample, neg_sample, neutral_sample, class_label
+        original_sample = self._get_original_sample(sample)
+        return pos_sample, neg_sample, neutral_sample, original_sample, class_label
 
     def get_MNIST_partition(self, partition):
         if partition in ["train", "val", "train_val"]:
             mnist = torchvision.datasets.MNIST(
-                os.path.join(".", "data"),
+                os.path.join("..", "data"),
                 train=True,
                 download=True,
                 transform=torchvision.transforms.ToTensor(),
             )
         elif partition in ["test"]:
             mnist = torchvision.datasets.MNIST(
-                os.path.join(".", "data"),
+                os.path.join("..", "data"),
                 train=False,
                 download=True,
                 transform=torchvision.transforms.ToTensor(),
@@ -191,7 +201,7 @@ class FF_MNIST(torch.utils.data.Dataset):
             mnist = torch.utils.data.Subset(mnist, range(50000))
         elif partition == "val":
             mnist = torchvision.datasets.MNIST(
-                os.path.join(".", "data"),
+                os.path.join("..", "data"),
                 train=True,
                 download=True,
                 transform=torchvision.transforms.ToTensor(),

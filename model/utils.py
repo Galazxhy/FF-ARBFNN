@@ -1,8 +1,8 @@
 """
 Author: Galazxhy galazxhy@163.com
-Date: 2025-08-09 14:54:38
+Date: 2025-08-27 18:13:31
 LastEditors: Galazxhy galazxhy@163.com
-LastEditTime: 2025-08-09 14:54:38
+LastEditTime: 2025-08-27 18:13:32
 FilePath: /SORBF/model/utils.py
 Description:
 
@@ -26,6 +26,18 @@ def get_accuracy(output, target):
         return (prediction == target).sum() / config.batch_size
 
 
+def get_linear_cooldown_lr(epoch, lr):
+    if epoch > (config.epoch // 2):
+        return lr * 2 * (1 + config.epoch - epoch) / config.epoch
+    else:
+        return lr
+
+
+def update_learning_rate(optimizer, epoch, lr):
+    optimizer.param_groups[0]["lr"] = get_linear_cooldown_lr(epoch, lr)
+    return optimizer
+
+
 def print_results(partition, iteration_time, scalar_outputs, writer, epoch=None):
     if epoch is not None:
         print(f"Epoch {epoch} \t", end="")
@@ -46,19 +58,27 @@ def print_results(partition, iteration_time, scalar_outputs, writer, epoch=None)
     if scalar_outputs is not None:
         for key, value in scalar_outputs.items():
             (
-                writer.add_scalar(partition + key, value, epoch)
+                writer.add_scalar(partition + " " + key, value, epoch)
                 if key != "output"
                 else None
             )
+        with open(config.path + "/output_log.txt", mode="a") as f:
+            f.write("Epoch:" + str(epoch))
+            f.write("\n")
+            for key, value in scalar_outputs.items():
+                if key != "output":
+                    f.write(str(key) + ":" + str(value))
+                    f.write("\n")
+            f.write("\n")
 
 
 def log_results(result_dict, scalar_outputs, num_steps):
     for key, value in scalar_outputs.items():
         if "num_neurons_layer" in key:
             result_dict[key] = value
-        elif "Dup_neurons" in key:
+        elif "dup_neurons" in key:
             result_dict[key] += value.item()
-        elif "Del_neurons" in key:
+        elif "del_neurons" in key:
             result_dict[key] += value.item()
         elif "output" in key:
             result_dict[key] = value
@@ -81,19 +101,6 @@ def preprocess_inputs(inputs, labels):
         inputs = dict_to_cuda(inputs)
         labels = dict_to_cuda(labels)
     return inputs, labels
-
-
-def get_linear_cooldown_lr(epoch, lr):
-    if epoch > (config.epoch // 2):
-        return lr * 2 * (1 + config.epoch - epoch) / config.epoch
-    else:
-        return lr
-
-
-def update_learning_rate(optimizer, epoch):
-    optimizer.param_groups[0]["lr"] = get_linear_cooldown_lr(epoch, config.lr)
-    optimizer.param_groups[1]["lr"] = get_linear_cooldown_lr(epoch, config.lr)
-    return optimizer
 
 
 def get_data(partition):
@@ -123,24 +130,31 @@ def get_optimizer(model):
     main_model_params = [
         p
         for p in model.parameters()
-        if all(p is not x for x in [model.classification_weight])
+        if all(p is not x for x in model.fc_out.parameters())
     ]
-    optimizer = torch.optim.AdamW(
-        [
-            {
-                "params": main_model_params,
-                "lr": config.lr,
-                "weight_decay": config.wd,
-                "momentum": config.momentum,
-            },
-            {
-                "params": [model.classification_weight],
-                "lr": config.downstream_lr,
-                "weight_decay": config.downstream_wd,
-                "momentum": config.momentum,
-            },
-        ]
-    )
+    optimizer = [
+        torch.optim.AdamW(
+            [
+                {
+                    "params": main_model_params,
+                    "lr": config.lr,
+                    "weight_decay": config.wd,
+                    "momentum": config.momentum,
+                }
+            ]
+        ),
+        torch.optim.AdamW(
+            [
+                {
+                    "params": model.fc_out.parameters(),
+                    "lr": config.downstream_lr,
+                    "weight_decay": config.downstream_wd,
+                    "momentum": config.momentum,
+                }
+            ]
+        ),
+    ]
+
     return model, optimizer
 
 
@@ -154,6 +168,17 @@ def ts_append(a, b):
         return b
     else:
         return torch.cat([a, b], dim=0)
+
+
+def get_indices(output, y):
+    with torch.no_grad():
+        acc = sum(output == y) / (output.shape[0])
+        f1_mac = f1_score(output, y, average="macro")
+        f1_mic = f1_score(output, y, average="micro")
+        auc_s = roc_auc_score(
+            output, F.one_hot(torch.tensor(y)).numpy(), multi_class="ovo"
+        )
+        return (acc, f1_mac, f1_mic, auc_s)
 
 
 def valid_no_model(output, y):

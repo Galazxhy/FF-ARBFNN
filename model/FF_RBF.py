@@ -23,10 +23,14 @@ class FF_RBF(nn.Module):
     def __init__(self, out_features=4):
         super(FF_RBF, self).__init__()
 
-        self.rbf_embeddings = nn.ModuleList([])
+        self.layers = nn.ModuleList([])
         for i in range(len(config.init_num_centers) - 1):
-            self.rbf_embeddings.append(
-                RBFLayer(config.init_num_centers[i + 1], config.init_num_centers[i]),
+            self.layers.append(
+                RBFLayer(
+                    config.init_num_centers[i + 1],
+                    config.init_num_centers[i],
+                    config.init_num_centers[i + 1],
+                )
             )
 
         channels_for_classification_loss = sum(
@@ -37,55 +41,14 @@ class FF_RBF(nn.Module):
         )
 
         self.fc_out = nn.Linear(
-            channels_for_classification_loss, out_features, bias=False
+            channels_for_classification_loss, out_features, bias=True
         )
-        self.classification_weight = nn.Parameter(
-            torch.randn(channels_for_classification_loss, out_features)
-        )
-        self.bias = nn.Parameter(torch.randn(1, out_features))
-        self.act_fn = ReLU_full_grad()
+
+        # self.act_fn = nn.ReLU()
 
         self.ff_loss = nn.BCEWithLogitsLoss()
         self.classification_loss = nn.CrossEntropyLoss()
-        self.dup_neurons = 0
-        self.del_neurons = 0
         self.organized = False
-
-    def fc_out(self, input):
-        return torch.mm(input, self.classification_weight) + self.bias
-
-    def add_weight(self, indices):
-        """
-        Add Neurons
-        """
-        best_weights = nn.Parameter(
-            torch.index_select(self.classification_weight.detach(), 0, indices)
-        )
-        if (
-            best_weights.shape[0] != 0
-            and self.classification_weight.shape[0] < config.max_neurons
-        ):
-            self.classification_weight = nn.Parameter(
-                torch.cat(
-                    [self.classification_weight.detach(), best_weights],
-                    dim=0,
-                )
-            )
-            return True
-        return False
-
-    def del_weight(self, indices):
-        """
-        Delete Neurons
-        """
-        if indices.shape[0] != 0:
-            mask = torch.ones(self.classification_weight.size(0), dtype=torch.bool)
-            mask[indices] = False
-            self.classification_weight = nn.Parameter(
-                self.classification_weight.detach()[mask]
-            )
-            return True
-        return False
 
     def _layer_norm(self, z, eps=1e-8):
         return z / (torch.sqrt(torch.mean(z**2, dim=-1, keepdim=True)) + eps)
@@ -104,57 +67,30 @@ class FF_RBF(nn.Module):
             ).item()
         return ff_loss, ff_accuracy
 
-    def self_organize(self, inputs):
-        with torch.no_grad():
-            z = torch.cat([inputs["pos_sample"], inputs["neg_sample"]], dim=0)
-            z = z.reshape(z.shape[0], -1)
-            z = self._layer_norm(z)
-            for i, layer in enumerate(self.rbf_embeddings):
-                hid = layer(z)
+    def embedding(self, inputs):
+        z = torch.cat([inputs["pos_sample"], inputs["neg_sample"]], dim=0)
+        z = z.reshape(z.shape[0], -1)
+        z = self._layer_norm(z)
 
-                sum_of_squares = torch.sum(hid**2, dim=-1)
-                g_pos = sum_of_squares[: config.batch_size]
-                g_neg = sum_of_squares[config.batch_size :]
+        pos_embeddings = []
+        neg_embeddings = []
 
-                lgt_pos = g_pos - config.theta
-                lgt_neg = g_neg - config.theta
+        for idx, layer in enumerate(self.layers):
+            rbf_out = layer(z)
+            z = layer.mapping(rbf_out)
 
-                add_pos_mask = torch.sigmoid(lgt_pos) > 0.9
-                add_neg_mask = torch.sigmoid(lgt_neg) < 0.1
+            if idx >= 0:
+                pos_embeddings.append(z[: config.batch_size])
+                neg_embeddings.append(z[config.batch_size :])
 
-                add_mask = add_pos_mask & add_neg_mask
-                self.dup_neurons = add_mask.sum()
-                # print(self.dup_neurons)
+        pos_embeddings = torch.concat(pos_embeddings, dim=-1)
+        neg_embeddings = torch.concat(neg_embeddings, dim=-1)
 
-                layer.addNeurons(torch.where(add_mask)[0])
-                added = self.add_weight(torch.where(add_mask)[0])
-                self.organized = self.organized or added
-
-                del_pos_mask = torch.sigmoid(lgt_pos) < 0.4
-                del_neg_mask = torch.sigmoid(lgt_neg) > 0.6
-
-                del_mask = del_pos_mask & del_neg_mask
-                self.del_neurons = del_mask.sum()
-                # print(self.del_neurons)
-
-                layer.delNeurons(torch.where(del_mask)[0])
-                deled = self.del_weight(torch.where(del_mask)[0])
-                self.organized = self.organized or deled
-
-                # print(self.dup_neurons, self.del_neurons)
-
-                z = hid
-                z = self._layer_norm(z)
+        return pos_embeddings, neg_embeddings
 
     def forward(self, inputs, labels):
-        self.dup_neurons = 0
-        self.del_neurons = 0
         self.organized = False
-        scalar_outputs = {
-            "Loss": torch.zeros(1, device=torch.device(config.device)),
-            "Dup_neurons": torch.zeros(1, device=torch.device(config.device)),
-            "Del_neurons": torch.zeros(1, device=torch.device(config.device)),
-        }
+        scalar_outputs = {"Loss": torch.zeros(1, device=torch.device(config.device))}
 
         z = torch.cat([inputs["pos_sample"], inputs["neg_sample"]], dim=0)
         posneg_labels = torch.ones(z.shape[0], device=torch.device(config.device))
@@ -162,8 +98,10 @@ class FF_RBF(nn.Module):
 
         z = z.reshape(z.shape[0], -1)
         z = self._layer_norm(z)
-        for idx, layer in enumerate(self.rbf_embeddings):
-            z = layer(z)
+        for idx, layer in enumerate(self.layers):
+            # print(z.shape)
+            rbf_out = layer(z)
+            z = layer.mapping(rbf_out)
 
             ff_loss, ff_accuracy = self._calc_ff_loss(z, posneg_labels)
             scalar_outputs[f"loss_layer_{idx}"] = ff_loss
@@ -172,14 +110,19 @@ class FF_RBF(nn.Module):
             # g = make_dot(z)
             # g.render(filename=f"Graph {idx}", view=False)
             z = z.detach()
-            # self._self_organize(layer, z)
+            rbf_out = rbf_out.detach()
+            organized, dup_neurons, del_neurons = layer.adjustStruc(rbf_out.detach())
+            self.organized = self.organized or organized
+
             scalar_outputs[f"num_neurons_layer_{idx}"] = layer.getNeuronNum()
+            scalar_outputs[f"dup_neurons_layer_{idx}"] = dup_neurons
+            scalar_outputs[f"del_neurons_layer_{idx}"] = del_neurons
 
             z = self._layer_norm(z)
 
-        scalar_outputs = self.forward_downstream_classification_model(
-            inputs, labels, scalar_outputs=scalar_outputs
-        )
+        # scalar_outputs = self.forward_downstream_classification_model(
+        #     inputs, labels, scalar_outputs=scalar_outputs
+        # )
 
         return scalar_outputs
 
@@ -188,7 +131,9 @@ class FF_RBF(nn.Module):
     ):
         if scalar_outputs is None:
             scalar_outputs = {
-                "Loss": torch.zeros(1, device=torch.device(config.device))
+                "classification_loss": torch.zeros(
+                    1, device=torch.device(config.device)
+                )
             }
 
         z = inputs["natrual_sample"]
@@ -198,8 +143,8 @@ class FF_RBF(nn.Module):
         input_classification_model = []
 
         with torch.no_grad():
-            for idx, layer in enumerate(self.rbf_embeddings):
-                z = layer(z)
+            for idx, layer in enumerate(self.layers):
+                z = layer.mapping(layer(z))
                 z = self._layer_norm(z)
 
                 if idx >= 0:
@@ -207,15 +152,13 @@ class FF_RBF(nn.Module):
 
         input_classification_model = torch.concat(input_classification_model, dim=-1)
         output = self.fc_out(input_classification_model.detach())
-        # output = output - torch.max(output, dim=-1, keepdim=True)[0]
+        output = output - torch.max(output, dim=-1, keepdim=True)[0]
 
         classification_loss = self.classification_loss(output, labels["class_labels"])
         classification_accuracy = get_accuracy(output.data, labels["class_labels"])
 
         scalar_outputs["output"] = output
-        scalar_outputs["Loss"] += classification_loss
-
-        scalar_outputs["classification_loss"] = classification_loss
+        scalar_outputs["classification_loss"] += classification_loss
         scalar_outputs["classification_accuracy"] = classification_accuracy
 
         return scalar_outputs
