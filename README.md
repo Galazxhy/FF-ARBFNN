@@ -14,7 +14,7 @@ This repository contains a **PyTorch** implementation for the paper "Adaptive Ra
 
 ```
 git clone https://github.com/Galazxhy/FF-ARBFNN.git
-cd FF-ARBFNN_pub
+cd FF-ARBFNN
 pip install -r requirements.txt
 ```
 
