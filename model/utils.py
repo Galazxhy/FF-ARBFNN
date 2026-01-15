@@ -12,11 +12,11 @@ Copyright (c) 2025 by Astroyd, All Rights Reserved.
 from datetime import timedelta
 
 import torch
-from model.FF_TE import FF_TE, FF_MNIST
+from model.FF_TE import FF_TE, FF_MNIST, FF_ZINC
 from config import config
 
 import torch.nn.functional as F
-from sklearn.metrics import f1_score, roc_auc_score
+from sklearn.metrics import f1_score, roc_auc_score, cohen_kappa_score
 
 
 def get_accuracy(output, target):
@@ -104,7 +104,7 @@ def preprocess_inputs(inputs, labels):
 
 
 def get_data(partition):
-    dataset = FF_MNIST(partition)
+    dataset = FF_ZINC(partition)
 
     # Improve reproducibility in dataloader.
     g = torch.Generator()
@@ -174,7 +174,7 @@ def get_indices(output, y):
     with torch.no_grad():
         acc = sum(output == y) / (output.shape[0])
         f1_mac = f1_score(output, y, average="macro")
-        f1_mic = f1_score(output, y, average="micro")
+        f1_mic = cohen_kappa_score(output, y)
         auc_s = roc_auc_score(
             output, F.one_hot(torch.tensor(y)).numpy(), multi_class="ovo"
         )
@@ -184,6 +184,6 @@ def get_indices(output, y):
 def valid_no_model(output, y):
     acc = sum(output == y) / (output.shape[0])
     f1_mac = f1_score(output, y, average="macro")
-    f1_mic = f1_score(output, y, average="micro")
+    f1_mic = cohen_kappa_score(output, y)
     auc_s = roc_auc_score(output, F.one_hot(torch.tensor(y)).numpy(), multi_class="ovo")
     return (acc, f1_mac, f1_mic, auc_s)

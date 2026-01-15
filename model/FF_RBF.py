@@ -80,8 +80,8 @@ class FF_RBF(nn.Module):
             z = layer.mapping(rbf_out)
 
             if idx >= 0:
-                pos_embeddings.append(z[: config.batch_size])
-                neg_embeddings.append(z[config.batch_size :])
+                pos_embeddings.append(z[: z.shape[0] // 2])
+                neg_embeddings.append(z[z.shape[0] // 2 :])
 
         pos_embeddings = torch.concat(pos_embeddings, dim=-1)
         neg_embeddings = torch.concat(neg_embeddings, dim=-1)

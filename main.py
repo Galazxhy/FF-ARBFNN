@@ -139,7 +139,7 @@ def validate_or_test(model, partition, epoch=None):
             test_acc,
             "test_f1_mac:",
             test_f1_mac,
-            "test_f1_mic:",
+            "CK:",
             test_f1_mic,
             "test_auc:",
             test_auc,
@@ -152,9 +152,9 @@ def validate_or_test(model, partition, epoch=None):
 
 
 def run():
-    # np.random.seed(config.seed)
-    # torch.manual_seed(config.seed)
-    # random.seed(config.seed)
+    np.random.seed(config.seed)
+    torch.manual_seed(config.seed)
+    random.seed(config.seed)
 
     model = FF_RBF.FF_RBF(out_features=config.out_dim)
     model, optimizer = utils.get_optimizer(model)

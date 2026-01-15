@@ -1,3 +1,8 @@
 /data/MNIST
 **/__pycache__
 /Log
+/writing/data
+/writing/saveMNISTLog
+/writing/saveTELog
+/writing/saveZincLog
+/writing/Conf_matrices

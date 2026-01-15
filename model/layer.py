@@ -127,10 +127,10 @@ class RBFLayer(nn.Module):
 
         # print(F.softmax(lgt_pos, dim=0), F.softmax(lgt_neg, dim=0))
         add_pos_mask = F.gumbel_softmax(lgt_pos, dim=0, tau=1.2) > (
-            5 * (1 / self.centers.shape[0])
+            25 * (1 / self.centers.shape[0])
         )
         add_neg_mask = F.gumbel_softmax(lgt_neg, dim=0, tau=1.2) < (
-            0.02 * (1 / self.centers.shape[0])
+            0.0015 * (1 / self.centers.shape[0])
         )
 
         add_mask = add_pos_mask & add_neg_mask
@@ -141,10 +141,10 @@ class RBFLayer(nn.Module):
         organized = organized or added
 
         del_pos_mask = F.gumbel_softmax(lgt_pos, dim=0, tau=1.2) < (
-            0.02 * (1 / self.centers.shape[0])
+            0.0015 * (1 / self.centers.shape[0])
         )
         del_neg_mask = F.gumbel_softmax(lgt_neg, dim=0, tau=1.2) > (
-            5 * (1 / self.centers.shape[0])
+            25 * (1 / self.centers.shape[0])
         )
 
         del_mask = del_pos_mask & del_neg_mask
