@@ -10,7 +10,7 @@ Copyright (c) 2025 by Astroyd, All Rights Reserved.
 """
 
 device = "cuda:0"
-dataset = "TE"
+dataset = "TE" # TE/MINST
 seed = 42
 epoch = 1000
 batch_size = 210
