@@ -12,7 +12,7 @@ Copyright (c) 2025 by Astroyd, All Rights Reserved.
 from datetime import timedelta
 
 import torch
-from model.FF_TE import FF_TE, FF_MNIST, FF_ZINC
+from model.FF_TE import FF_TE, FF_MNIST
 from config import config
 
 import torch.nn.functional as F
@@ -104,7 +104,7 @@ def preprocess_inputs(inputs, labels):
 
 
 def get_data(partition):
-    dataset = FF_ZINC(partition)
+    dataset = globals()["FF_" + config.dataset](partition)
 
     # Improve reproducibility in dataloader.
     g = torch.Generator()

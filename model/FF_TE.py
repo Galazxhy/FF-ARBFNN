@@ -70,35 +70,25 @@ class FF_TE(torch.utils.data.Dataset):
             [one_hot_label.unsqueeze(0), pos_sample.unsqueeze(0)],
             dim=1,
         )
-        # pos_sample[:, 0, : self.num_classes] = one_hot_label
         return pos_sample
 
     def _get_neg_sample(self, sample, class_label):
         # Create randomly sampled one-hot label.
         classes = list(range(self.num_classes))
-        classes.remove(class_label)  # Remove true label from possible choices.
+        classes.remove(class_label)
         wrong_class_label = np.random.choice(classes)
         one_hot_label = torch.nn.functional.one_hot(
             torch.tensor(wrong_class_label), num_classes=self.num_classes
         )
         neg_sample = sample.clone()
-        # neg_sample = torch.cat(
-        #     [one_hot_label.unsqueeze(0), neg_sample.reshape(neg_sample.shape[0], -1)],
-        #     dim=1,
-        # )
         neg_sample = torch.cat(
             [one_hot_label.unsqueeze(0), neg_sample.unsqueeze(0)],
             dim=1,
         )
-        # neg_sample[:, 0, : self.num_classes] = one_hot_label
         return neg_sample
 
     def _get_neutral_sample(self, z):
-        # z = torch.cat(
-        #     [self.uniform_label.unsqueeze(0), z.reshape(z.shape[0], -1)], dim=1
-        # )
         z = torch.cat([self.uniform_label.unsqueeze(0), z.unsqueeze(0)], dim=1)
-        # z[:, 0, : self.num_classes] = self.uniform_label
         return z
 
     def _get_original_sample(self, z):
@@ -209,99 +199,3 @@ class FF_MNIST(torch.utils.data.Dataset):
             mnist = torch.utils.data.Subset(mnist, range(50000, 60000))
 
         return mnist
-
-
-class FF_ZINC(torch.utils.data.Dataset):
-    def __init__(self, partition, num_classes=4):
-        df = pd.read_excel("./data/Zinc/zincrougher.xls", header=None)
-        df.iloc[(df.iloc[:, 13] >= 0.395903), 13] = 3
-        df.iloc[(df.iloc[:, 13] < 0.395903) & (df.iloc[:, 13] >= -0.157400), 13] = 2
-        df.iloc[(df.iloc[:, 13] < -0.157400) & (df.iloc[:, 13] >= -0.591114), 13] = 1
-        df.iloc[(df.iloc[:, 13] < -0.591114), 13] = 0
-
-        scalar = StandardScaler()
-        df.iloc[:, :-1] = scalar.fit_transform(df.iloc[:, :-1])
-        npdata = df.values.astype(np.float32)
-        Zinc_dataset = torch.utils.data.TensorDataset(
-            torch.tensor(npdata[:, :-1]), torch.tensor(npdata[:, -1]).to(torch.int64)
-        )
-        idx = [i for i in range(len(Zinc_dataset))]
-        random.shuffle(idx)
-        if partition == "train":
-            self.Zinc = torch.utils.data.Subset(Zinc_dataset, idx[:3153])
-        elif partition == "val":
-            self.Zinc = torch.utils.data.Subset(Zinc_dataset, idx[3153:4053])
-        elif partition == "test":
-            self.Zinc = torch.utils.data.Subset(Zinc_dataset, idx[4053:])
-
-        self.num_classes = num_classes
-        self.uniform_label = torch.ones(self.num_classes) / self.num_classes
-
-    def __getitem__(self, index):
-        pos_sample, neg_sample, neutral_sample, original_sample, class_label = (
-            self._generate_sample(index)
-        )
-
-        inputs = {
-            "pos_sample": pos_sample,
-            "neg_sample": neg_sample,
-            "natrual_sample": neutral_sample,
-            "original_sample": original_sample,
-        }
-        labels = {"class_labels": class_label}
-        return inputs, labels
-
-    def __len__(self):
-        return len(self.Zinc)
-
-    def _get_pos_sample(self, sample, class_label):
-        one_hot_label = torch.nn.functional.one_hot(
-            torch.tensor(class_label), num_classes=self.num_classes
-        )
-        pos_sample = sample.clone()
-        pos_sample = torch.cat(
-            [one_hot_label.unsqueeze(0), pos_sample.unsqueeze(0)],
-            dim=1,
-        )
-        # pos_sample[:, 0, : self.num_classes] = one_hot_label
-        return pos_sample
-
-    def _get_neg_sample(self, sample, class_label):
-        # Create randomly sampled one-hot label.
-        classes = list(range(self.num_classes))
-        classes.remove(class_label)  # Remove true label from possible choices.
-        wrong_class_label = np.random.choice(classes)
-        one_hot_label = torch.nn.functional.one_hot(
-            torch.tensor(wrong_class_label), num_classes=self.num_classes
-        )
-        neg_sample = sample.clone()
-        # neg_sample = torch.cat(
-        #     [one_hot_label.unsqueeze(0), neg_sample.reshape(neg_sample.shape[0], -1)],
-        #     dim=1,
-        # )
-        neg_sample = torch.cat(
-            [one_hot_label.unsqueeze(0), neg_sample.unsqueeze(0)],
-            dim=1,
-        )
-        # neg_sample[:, 0, : self.num_classes] = one_hot_label
-        return neg_sample
-
-    def _get_neutral_sample(self, z):
-        # z = torch.cat(
-        #     [self.uniform_label.unsqueeze(0), z.reshape(z.shape[0], -1)], dim=1
-        # )
-        z = torch.cat([self.uniform_label.unsqueeze(0), z.unsqueeze(0)], dim=1)
-        # z[:, 0, : self.num_classes] = self.uniform_label
-        return z
-
-    def _get_original_sample(self, z):
-        return z
-
-    def _generate_sample(self, index):
-        # Get MNIST sample.
-        sample, class_label = self.Zinc[index]
-        pos_sample = self._get_pos_sample(sample, class_label)
-        neg_sample = self._get_neg_sample(sample, class_label)
-        neutral_sample = self._get_neutral_sample(sample)
-        original_sample = self._get_original_sample(sample)
-        return pos_sample, neg_sample, neutral_sample, original_sample, class_label

@@ -10,11 +10,11 @@ Copyright (c) 2025 by Astroyd, All Rights Reserved.
 """
 
 device = "cuda:0"
-# seed = [42, 15, 263, 745, 32, 85, 52, 63, 37, 73]
+dataset = "TE"
 seed = 42
-epoch = 3000
+epoch = 1000
 batch_size = 210
-init_num_centers = [17, 800]
+init_num_centers = [13, 800]
 theta = 200
 out_dim = 4
 
