@@ -12,7 +12,7 @@ Copyright (c) 2025 by Astroyd, All Rights Reserved.
 from datetime import timedelta
 
 import torch
-from model.FF_TE import FF_TE, FF_MNIST
+from model.TE import FF_TE, FF_MNIST
 from config import config
 
 import torch.nn.functional as F

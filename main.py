@@ -20,7 +20,7 @@ import numpy as np
 from omegaconf import DictConfig
 from torch.utils.tensorboard import SummaryWriter
 
-from model import FF_RBF
+from model import LAK_Net
 from model import utils
 from torchviz import make_dot
 
@@ -156,7 +156,7 @@ def run():
     torch.manual_seed(config.seed)
     random.seed(config.seed)
 
-    model = FF_RBF.FF_RBF(out_features=config.out_dim)
+    model = LAK_Net.FF_RBF(out_features=config.out_dim)
     model, optimizer = utils.get_optimizer(model)
     model = train(model, optimizer)
     validate_or_test(model, "val")
